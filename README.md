@@ -1,2 +1,2 @@
-# ls
+# dir
 study for golang
