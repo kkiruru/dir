@@ -6,7 +6,11 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
+
+	"github.com/nathan-fiscaletti/consolesize-go"
 )
 
 type DirectoryInfo struct {
@@ -31,20 +35,24 @@ func main() {
 	// directoryName, _ := currentWorkingDirectory()
 	// readInDir(directoryName)
 	readCurrentDir()
-	upperDirInfo()
+	readUpperDir()
+
+	getTerminalSize()
+
+	maina()
 }
 
 func readCurrentDir() {
 	readInDir(".")
 }
 
-func upperDirInfo() {
+func readUpperDir() {
 	readInDir("..")
 }
 
 
-func readInDir(directory string) {
-	file, err := os.Open(directory)
+func readInDir(path string) {
+	file, err := os.Open(path)
 	if err != nil {
 		log.Fatalf("failed opening directory: %s", err)
 	}
@@ -60,7 +68,7 @@ func readInDir(directory string) {
 
 	fmt.Println()
 
-	calculateDirSize(directory)
+	calculateDirSize(path)
 }
 
 func waitingKeyEvent() {
@@ -78,33 +86,33 @@ func waitingKeyEvent() {
 }
 
 func currentWorkingDirectory() (string, error) {
-	dir, err := os.Getwd()
+	path, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
 		return "", err
 	}
-	fmt.Println("cwd: ", dir)
-	return dir, nil
+	fmt.Println("cwd: ", path)
+	return path, nil
 }
 
-func calculateDirSize(dirpath string) (dirsize int64, err error) {
-	isDir, _ := isDirectory(dirpath)
+func calculateDirSize(path string) (size int64, err error) {
+	isDir, _ := isDirectory(path)
 	if !isDir {
 		return
 	}
 
-	files, err := ioutil.ReadDir(dirpath)
+	files, err := ioutil.ReadDir(path)
 	if err != nil {
 		return
 	}
 
 	for _, file := range files {
 		if file.Mode().IsRegular() {
-			dirsize += file.Size()
+			size += file.Size()
 		}
 	}
 
-	fmt.Printf("_ %s size is %d \n", dirpath, dirsize)
+	fmt.Printf("_ %s size is %d \n", path, size)
 	return
 }
 
@@ -114,4 +122,39 @@ func isDirectory(path string) (bool, error) {
 		return false, err
 	}
 	return fi.IsDir(), err
+}
+
+
+func getTerminalSize()(cols int, rows int){
+	cols, rows = consolesize.GetConsoleSize()
+	fmt.Printf("Rows: %v, Cols: %v\n", rows, cols)
+	return
+}
+
+
+func maina() {
+    doneCh := make(chan struct{})
+
+    signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, syscall.SIGWINCH, syscall.SIGTERM)
+
+
+    go receive(signalCh, doneCh)
+
+	<-doneCh
+
+	fmt.Println(doneCh)
+}
+
+func receive(signalCh chan os.Signal, doneCh chan struct{}) {
+    for {
+        select {
+        // Example. Process to receive a message
+        // case msg := <-receiveMessage():
+		case sig := <-signalCh:
+			doneCh <- struct{}{}
+			// print this line telling us which signal was seen
+			fmt.Println("Received signal from OS: ", sig)
+        }
+    }
 }
