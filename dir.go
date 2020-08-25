@@ -157,7 +157,7 @@ func getSize(file os.FileInfo) string {
 				}
 			}
 		}
-		return string(fileSize)
+		return fmt.Sprint(fileSize)
 	}
 }
 
