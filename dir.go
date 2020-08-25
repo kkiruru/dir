@@ -88,7 +88,7 @@ func colorize(file os.FileInfo)(coloredWord string){
 	var r, g, b uint8
 	r, g, b = 252, 255, 43
 
-	coloredWord = fmt.Sprintf("\n%-23s %-10s %s", file.Name(), getSize(file), getDateTime(file))
+	coloredWord = fmt.Sprintf("\n%s  %5s  %-23s ", getDateTime(file), getSize(file), file.Name())
 
 	if file.IsDir() {
 		if isHidden(file){
@@ -172,7 +172,7 @@ func getDateTime(file os.FileInfo) string {
 func print(dirs []os.FileInfo) {
 	fmt.Printf("\nName\t\tSize\tIsDirectory  Last Modification\n")
 	for _, dirs := range dirs {
-		fmt.Printf("\n%-15s %-7v %-12v %v %#032b", dirs.Name(), dirs.Size(), dirs.IsDir(), dirs.ModTime(), dirs.Mode())
+		fmt.Printf("\n%-15s  %-7v %-12v %v %#032b", dirs.Name(), dirs.Size(), dirs.IsDir(), dirs.ModTime(), dirs.Mode())
 	}
 }
 
