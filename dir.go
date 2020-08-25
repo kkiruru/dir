@@ -7,17 +7,22 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sort"
+	"strconv"
 	"syscall"
 	"time"
 
+	"github.com/aybabtme/rgbterm"
 	"github.com/nathan-fiscaletti/consolesize-go"
 )
 
 type DirectoryInformation struct {
-	cwd     string
-	size    int64
-	subDirs []FileInformation
-	files   []FileInformation
+	cwd  string
+	size int64
+	// subDirs []FileInformation
+	// files   []FileInformation
+	subDirs []os.FileInfo
+	files   []os.FileInfo
 }
 
 type FileInformation struct {
@@ -31,21 +36,12 @@ type FileInformation struct {
 }
 
 func main() {
-	// directoryName, _ := currentWorkingDirectory()
-	// readInDir(directoryName)
-
-	directoryName, _ := currentWorkingDirectory()
-	fmt.Println("> ", directoryName)
-
-	// dirInfo(".")
-	// dirInfo("..")
-
-	readCurrentDir()
-	// readUpperDir()
-	// getTerminalSize()
+	result := readCurrentDir()
+	result.cwd, _ = currentWorkingDirectory()
+	printDir(result)
 }
 
-func readCurrentDir() {
+func readCurrentDir() DirectoryInformation {
 	slice := []os.FileInfo{}
 	fi, _ := dirInfo(".")
 	slice = append(slice, fi)
@@ -53,40 +49,138 @@ func readCurrentDir() {
 	fi, _ = dirInfo("..")
 	slice = append(slice, fi)
 
-	dirs, _ := readInDir(".")
+	dirs, files, size, _ := readInDir(".")
 	slice = append(slice, dirs...)
+	slice = append(slice, files...)
 
+	var di DirectoryInformation
 
-	dirs = []os.FileInfo{}
-	for _, dir := range slice {
+	di.size = size
+	di.subDirs = dirs
+	di.files = files
 
-		if dir.IsDir() {
-			dirs = append(dirs, dir)
-		}
-	}
-
-	for _, dir := range slice {
-		if !dir.IsDir() {
-			dirs = append(dirs, dir)
-		}
-	}
-	print(dirs)
+	return di
 }
 
-func print(dirs []os.FileInfo){
+func printDir(dirs DirectoryInformation) {
 
+	var r, g, b uint8
+	// pick a color
+	r, g, b = 252, 255, 43
+	// colorize it!
+	coloredWord := rgbterm.FgString(dirs.cwd, r, g, b)
+	fmt.Println("> ", coloredWord)
+	fmt.Println("Total ", dirs.size)
+
+	for _, dir := range dirs.subDirs {
+		fmt.Print(colorize(dir))
+	}
+
+	for _, file := range dirs.files {
+		fmt.Print(colorize(file))
+	}
+
+	fmt.Println("")
+}
+
+
+func colorize(file os.FileInfo)(coloredWord string){
+	var r, g, b uint8
+	r, g, b = 252, 255, 43
+
+	coloredWord = fmt.Sprintf("\n%-23s %-10s %s", file.Name(), getSize(file), getDateTime(file))
+
+	if file.IsDir() {
+		if isHidden(file){
+			r, g, b = 160, 0, 0
+		}else{
+			r, g, b = 224, 0, 0
+		}
+	}else if isExecute(file) {
+		if isHidden(file){
+			r, g, b = 0, 160, 0
+		}else{
+			r, g, b = 0, 224, 0
+		}
+	}else{
+		if isHidden(file){
+			r, g, b = 160, 160, 160
+		}else{
+			r, g, b = 224, 224, 224
+		}
+	}
+
+	coloredWord = rgbterm.FgString(coloredWord, r, g, b)
+
+	return
+}
+
+const (
+    OTHER_X uint32 = 1 << iota
+    OTHER_W
+    OTHER_R
+    GROUP_X
+    GROUP_W
+    GROUP_R
+    OWNER_X
+    OWNER_W
+    OWNER_R
+)
+
+func isExecute(file os.FileInfo) bool {
+	return ( ((uint32(file.Mode()) & (OTHER_X|GROUP_X|OWNER_X)) != 0 ))
+}
+
+func isHidden(file os.FileInfo) bool {
+	name := file.Name()
+	return name[0] == '.'
+}
+
+func getSize(file os.FileInfo) string {
+
+	fileSize := file.Size()
+
+	if fileSize < 1024 {
+		return strconv.FormatUint(uint64(fileSize), 10)
+	} else {
+		fileSize = fileSize / 1024
+		if fileSize < 1024 {
+			return strconv.FormatUint(uint64(fileSize), 10)+"K"
+		} else {
+			fileSize = fileSize / 1024
+			if fileSize < 1024 {
+				return strconv.FormatUint(uint64(fileSize), 10)+"M"
+			} else {
+				fileSize = fileSize / 1024
+				if fileSize < 1024 {
+					return strconv.FormatUint(uint64(fileSize), 10)+"G"
+				}
+			}
+		}
+		return string(fileSize)
+	}
+}
+
+func getDateTime(file os.FileInfo) string {
+	t := file.ModTime()
+	return t.Format("2006-01-02 15:04:05")
+}
+
+
+
+
+func print(dirs []os.FileInfo) {
 	fmt.Printf("\nName\t\tSize\tIsDirectory  Last Modification\n")
 	for _, dirs := range dirs {
 		fmt.Printf("\n%-15s %-7v %-12v %v %#032b", dirs.Name(), dirs.Size(), dirs.IsDir(), dirs.ModTime(), dirs.Mode())
 	}
 }
 
-
 func readUpperDir() {
 	readInDir("..")
 }
 
-func readInDir(path string) ([]os.FileInfo, error) {
+func readInDir(path string) (dirs []os.FileInfo, files []os.FileInfo, size int64, err error) {
 	file, err := os.Open(path)
 	if err != nil {
 		log.Fatalf("failed opening directory: %s", err)
@@ -95,14 +189,34 @@ func readInDir(path string) ([]os.FileInfo, error) {
 
 	fileList, _ := file.Readdir(0)
 
-	// fmt.Printf("\nName\t\tSize\tIsDirectory  Last Modification\n")
-	// for _, files := range fileList {
-	// 	fmt.Printf("\n%-15s %-7v %-12v %v %#032b", files.Name(), files.Size(), files.IsDir(), files.ModTime(), files.Mode())
-	// }
+	dirs = []os.FileInfo{}
+	files = []os.FileInfo{}
+	size = 0
 
-	// fmt.Println()
+	current, _ := dirInfo(".")
+	dirs = append(dirs, current)
 
-	return fileList, nil
+	parent, _ := dirInfo("..")
+	dirs = append(dirs, parent)
+
+	for _, file := range fileList {
+		if file.IsDir() {
+			dirs = append(dirs, file)
+		} else {
+			files = append(files, file)
+		}
+		size = size + file.Size()
+	}
+
+	sort.Slice(dirs, func(i, j int) bool {
+		return dirs[i].Name() < dirs[j].Name()
+	})
+
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Name() < files[j].Name()
+	})
+
+	return
 }
 
 func waitingKeyEvent() {
@@ -125,7 +239,6 @@ func currentWorkingDirectory() (string, error) {
 		log.Fatal(err)
 		return "", err
 	}
-	// fmt.Println("cwd: ", path)
 	return path, nil
 }
 
@@ -197,8 +310,5 @@ func dirInfo(dir string) (os.FileInfo, error) {
 	defer file.Close()
 
 	info, _ := file.Stat()
-
-	// fmt.Printf("%-15s %-7v %-12v %v %#032b\n", info.Name(), info.Size(), info.IsDir(), info.ModTime(), info.Mode())
-
 	return info, err
 }
